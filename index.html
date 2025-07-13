@@ -229,9 +229,9 @@
                     if (cellStr.match(/^[A-Za-z]+,\s*[A-Za-z]+/)) {
                         const name = cellStr;
                         
-                        // Look for shift type in the same row, previous columns
+                        // Look for shift type in the same row, previous columns (more restrictive)
                         let shiftType = null;
-                        for (let prevCol = colIndex - 1; prevCol >= 0; prevCol--) {
+                        for (let prevCol = colIndex - 1; prevCol >= Math.max(0, colIndex - 3); prevCol--) {
                             const prevCell = row[prevCol];
                             if (prevCell) {
                                 const prevCellStr = prevCell.toString().trim();
@@ -240,9 +240,9 @@
                             }
                         }
                         
-                        // If no shift type found in same row, look in previous rows, same column
+                        // If no shift type found in same row, look in previous rows, same column (more restrictive)
                         if (!shiftType) {
-                            for (let prevRow = rowIndex - 1; prevRow >= 0 && prevRow >= rowIndex - 10; prevRow--) {
+                            for (let prevRow = rowIndex - 1; prevRow >= Math.max(0, rowIndex - 3); prevRow--) {
                                 const prevRowData = data[prevRow];
                                 if (prevRowData && prevRowData[colIndex]) {
                                     const prevCellStr = prevRowData[colIndex].toString().trim();
@@ -252,13 +252,13 @@
                             }
                         }
                         
-                        // If still no shift type, look in nearby cells
+                        // If still no shift type, look in immediate nearby cells only
                         if (!shiftType) {
-                            for (let searchRow = Math.max(0, rowIndex - 5); searchRow <= Math.min(data.length - 1, rowIndex + 5); searchRow++) {
+                            for (let searchRow = Math.max(0, rowIndex - 2); searchRow <= Math.min(data.length - 1, rowIndex + 1); searchRow++) {
                                 const searchRowData = data[searchRow];
                                 if (!searchRowData) continue;
                                 
-                                for (let searchCol = Math.max(0, colIndex - 5); searchCol <= Math.min(searchRowData.length - 1, colIndex + 5); searchCol++) {
+                                for (let searchCol = Math.max(0, colIndex - 2); searchCol <= Math.min(searchRowData.length - 1, colIndex + 1); searchCol++) {
                                     const searchCell = searchRowData[searchCol];
                                     if (searchCell) {
                                         const searchCellStr = searchCell.toString().trim();
@@ -272,7 +272,7 @@
                         
                         if (shiftType) {
                             if (!counts[name]) {
-                                counts[name] = { A: 0, C: 0, D: 0, N: 0, Admit: 0 };
+                                counts[name] = { A: 0, C: 0, D: 0, N: 0, Admit: 0, Swing: 0, Admin: 0 };
                             }
                             counts[name][shiftType]++;
                         }
@@ -293,6 +293,8 @@
             if (text.includes('d team')) return 'D';
             if (text.includes('night') || text.includes('7p-7a')) return 'N';
             if (text.includes('admit')) return 'Admit';
+            if (text.includes('swing')) return 'Swing';
+            if (text.includes('administrator') || text.includes('admin')) return 'Admin';
             
             return null;
         }
@@ -309,16 +311,16 @@
             let html = '<h2>Shift Count Summary</h2>';
             html += '<table>';
             html += '<thead><tr>';
-            html += '<th>Name</th><th>A</th><th>C</th><th>D</th><th>N</th><th>Admit</th><th>A+C</th><th>Total</th>';
+            html += '<th>Name</th><th>A</th><th>C</th><th>D</th><th>N</th><th>Admit</th><th>Swing</th><th>Admin</th><th>A+C</th><th>Total</th>';
             html += '</tr></thead>';
             html += '<tbody>';
             
-            const totals = { A: 0, C: 0, D: 0, N: 0, Admit: 0, AC: 0, Total: 0 };
+            const totals = { A: 0, C: 0, D: 0, N: 0, Admit: 0, Swing: 0, Admin: 0, AC: 0, Total: 0 };
             
             names.forEach(name => {
                 const person = counts[name];
                 const ac = person.A + person.C;
-                const total = person.A + person.C + person.D + person.N + person.Admit;
+                const total = person.A + person.C + person.D + person.N + person.Admit + person.Swing + person.Admin;
                 
                 html += '<tr>';
                 html += `<td>${name}</td>`;
@@ -327,6 +329,8 @@
                 html += `<td class="numeric">${person.D}</td>`;
                 html += `<td class="numeric">${person.N}</td>`;
                 html += `<td class="numeric">${person.Admit}</td>`;
+                html += `<td class="numeric">${person.Swing}</td>`;
+                html += `<td class="numeric">${person.Admin}</td>`;
                 html += `<td class="numeric">${ac}</td>`;
                 html += `<td class="numeric">${total}</td>`;
                 html += '</tr>';
@@ -336,6 +340,8 @@
                 totals.D += person.D;
                 totals.N += person.N;
                 totals.Admit += person.Admit;
+                totals.Swing += person.Swing;
+                totals.Admin += person.Admin;
                 totals.AC += ac;
                 totals.Total += total;
             });
@@ -347,6 +353,8 @@
             html += `<td class="numeric"><strong>${totals.D}</strong></td>`;
             html += `<td class="numeric"><strong>${totals.N}</strong></td>`;
             html += `<td class="numeric"><strong>${totals.Admit}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.Swing}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.Admin}</strong></td>`;
             html += `<td class="numeric"><strong>${totals.AC}</strong></td>`;
             html += `<td class="numeric"><strong>${totals.Total}</strong></td>`;
             html += '</tr>';
@@ -366,8 +374,10 @@
                     D: person.D,
                     N: person.N,
                     Admit: person.Admit,
+                    Swing: person.Swing,
+                    Admin: person.Admin,
                     'A+C': person.A + person.C,
-                    Total: person.A + person.C + person.D + person.N + person.Admit
+                    Total: person.A + person.C + person.D + person.N + person.Admit + person.Swing + person.Admin
                 };
             });
             
@@ -383,7 +393,7 @@
             }
             
             // Create CSV content
-            const headers = ['Name', 'A', 'C', 'D', 'N', 'Admit', 'A+C', 'Total'];
+            const headers = ['Name', 'A', 'C', 'D', 'N', 'Admit', 'Swing', 'Admin', 'A+C', 'Total'];
             let csvContent = headers.join(',') + '\n';
             
             processedData.forEach(person => {
