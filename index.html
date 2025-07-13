@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Medicine Calendar Processor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .upload-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .upload-section.dragover {
+            border-color: #007bff;
+            background-color: #f0f8ff;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            width: 300px;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .results {
+            margin-top: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: white;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #e9ecef;
+        }
+        .numeric {
+            text-align: center;
+            font-weight: bold;
+        }
+        .total-row {
+            background-color: #e3f2fd !important;
+            font-weight: bold;
+        }
+        .error {
+            color: #dc3545;
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: #155724;
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Hospital Medicine Calendar Processor</h1>
+        
+        <div class="upload-section" id="uploadSection">
+            <h3>Upload Excel Calendar File</h3>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" />
+            <br>
+            <button onclick="processFile()">Process Calendar</button>
+            <button onclick="downloadResults()" id="downloadBtn" disabled>Download Results</button>
+        </div>
+        
+        <div id="messages"></div>
+        
+        <div class="results" id="results"></div>
+    </div>
+
+    <script>
+        let processedData = [];
+        let resultTable = '';
+
+        // Drag and drop functionality
+        document.getElementById('uploadSection').addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.add('dragover');
+        });
+
+        document.getElementById('uploadSection').addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+        });
+
+        document.getElementById('uploadSection').addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            this.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                document.getElementById('fileInput').files = files;
+                processFile();
+            }
+        });
+
+        function showMessage(message, type = 'success') {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `<div class="${type}">${message}</div>`;
+            setTimeout(() => {
+                messagesDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        function processFile() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                showMessage('Please select a file first.', 'error');
+                return;
+            }
+
+            if (!file.name.match(/\.(xlsx|xls)$/)) {
+                showMessage('Please select a valid Excel file (.xlsx or .xls).', 'error');
+                return;
+            }
+
+            document.getElementById('results').innerHTML = '<div class="loading">Processing file, please wait...</div>';
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = e.target.result;
+                    const workbook = XLSX.read(data, { type: 'binary' });
+                    
+                    // Process the first sheet
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    
+                    // Convert to JSON with header row
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    
+                    processCalendarData(jsonData);
+                    
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    showMessage('Error processing file: ' + error.message, 'error');
+                    document.getElementById('results').innerHTML = '';
+                }
+            };
+            
+            reader.readAsBinaryString(file);
+        }
+
+        function processCalendarData(data) {
+            const counts = {};
+            
+            // Process each row and column
+            for (let rowIndex = 0; rowIndex < data.length; rowIndex++) {
+                const row = data[rowIndex];
+                if (!row) continue;
+                
+                for (let colIndex = 0; colIndex < row.length; colIndex++) {
+                    const cell = row[colIndex];
+                    if (!cell) continue;
+                    
+                    const cellStr = cell.toString().trim();
+                    
+                    // Check if this cell contains a name (last, first format)
+                    if (cellStr.match(/^[A-Za-z]+,\s*[A-Za-z]+/)) {
+                        const name = cellStr;
+                        
+                        // Look for shift type in the same row, previous columns
+                        let shiftType = null;
+                        for (let prevCol = colIndex - 1; prevCol >= 0; prevCol--) {
+                            const prevCell = row[prevCol];
+                            if (prevCell) {
+                                const prevCellStr = prevCell.toString().trim();
+                                shiftType = categorizeShift(prevCellStr);
+                                if (shiftType) break;
+                            }
+                        }
+                        
+                        // If no shift type found in same row, look in previous rows, same column
+                        if (!shiftType) {
+                            for (let prevRow = rowIndex - 1; prevRow >= 0 && prevRow >= rowIndex - 10; prevRow--) {
+                                const prevRowData = data[prevRow];
+                                if (prevRowData && prevRowData[colIndex]) {
+                                    const prevCellStr = prevRowData[colIndex].toString().trim();
+                                    shiftType = categorizeShift(prevCellStr);
+                                    if (shiftType) break;
+                                }
+                            }
+                        }
+                        
+                        // If still no shift type, look in nearby cells
+                        if (!shiftType) {
+                            for (let searchRow = Math.max(0, rowIndex - 5); searchRow <= Math.min(data.length - 1, rowIndex + 5); searchRow++) {
+                                const searchRowData = data[searchRow];
+                                if (!searchRowData) continue;
+                                
+                                for (let searchCol = Math.max(0, colIndex - 5); searchCol <= Math.min(searchRowData.length - 1, colIndex + 5); searchCol++) {
+                                    const searchCell = searchRowData[searchCol];
+                                    if (searchCell) {
+                                        const searchCellStr = searchCell.toString().trim();
+                                        shiftType = categorizeShift(searchCellStr);
+                                        if (shiftType) break;
+                                    }
+                                }
+                                if (shiftType) break;
+                            }
+                        }
+                        
+                        if (shiftType) {
+                            if (!counts[name]) {
+                                counts[name] = { A: 0, C: 0, D: 0, N: 0, Admit: 0 };
+                            }
+                            counts[name][shiftType]++;
+                        }
+                    }
+                }
+            }
+            
+            generateTable(counts);
+        }
+
+        function categorizeShift(shiftText) {
+            if (!shiftText) return null;
+            
+            const text = shiftText.toLowerCase();
+            
+            if (text.includes('a team')) return 'A';
+            if (text.includes('c team')) return 'C';
+            if (text.includes('d team')) return 'D';
+            if (text.includes('night') || text.includes('7p-7a')) return 'N';
+            if (text.includes('admit')) return 'Admit';
+            
+            return null;
+        }
+
+        function generateTable(counts) {
+            const names = Object.keys(counts).sort();
+            
+            if (names.length === 0) {
+                showMessage('No staff assignments found in the file. Please check the file format.', 'error');
+                document.getElementById('results').innerHTML = '';
+                return;
+            }
+            
+            let html = '<h2>Shift Count Summary</h2>';
+            html += '<table>';
+            html += '<thead><tr>';
+            html += '<th>Name</th><th>A</th><th>C</th><th>D</th><th>N</th><th>Admit</th><th>A+C</th><th>Total</th>';
+            html += '</tr></thead>';
+            html += '<tbody>';
+            
+            const totals = { A: 0, C: 0, D: 0, N: 0, Admit: 0, AC: 0, Total: 0 };
+            
+            names.forEach(name => {
+                const person = counts[name];
+                const ac = person.A + person.C;
+                const total = person.A + person.C + person.D + person.N + person.Admit;
+                
+                html += '<tr>';
+                html += `<td>${name}</td>`;
+                html += `<td class="numeric">${person.A}</td>`;
+                html += `<td class="numeric">${person.C}</td>`;
+                html += `<td class="numeric">${person.D}</td>`;
+                html += `<td class="numeric">${person.N}</td>`;
+                html += `<td class="numeric">${person.Admit}</td>`;
+                html += `<td class="numeric">${ac}</td>`;
+                html += `<td class="numeric">${total}</td>`;
+                html += '</tr>';
+                
+                totals.A += person.A;
+                totals.C += person.C;
+                totals.D += person.D;
+                totals.N += person.N;
+                totals.Admit += person.Admit;
+                totals.AC += ac;
+                totals.Total += total;
+            });
+            
+            html += '<tr class="total-row">';
+            html += '<td><strong>TOTALS</strong></td>';
+            html += `<td class="numeric"><strong>${totals.A}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.C}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.D}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.N}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.Admit}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.AC}</strong></td>`;
+            html += `<td class="numeric"><strong>${totals.Total}</strong></td>`;
+            html += '</tr>';
+            
+            html += '</tbody></table>';
+            
+            document.getElementById('results').innerHTML = html;
+            document.getElementById('downloadBtn').disabled = false;
+            
+            // Store processed data for download
+            processedData = names.map(name => {
+                const person = counts[name];
+                return {
+                    Name: name,
+                    A: person.A,
+                    C: person.C,
+                    D: person.D,
+                    N: person.N,
+                    Admit: person.Admit,
+                    'A+C': person.A + person.C,
+                    Total: person.A + person.C + person.D + person.N + person.Admit
+                };
+            });
+            
+            resultTable = html;
+            
+            showMessage(`Successfully processed ${names.length} staff members.`);
+        }
+
+        function downloadResults() {
+            if (processedData.length === 0) {
+                showMessage('No data to download. Please process a file first.', 'error');
+                return;
+            }
+            
+            // Create CSV content
+            const headers = ['Name', 'A', 'C', 'D', 'N', 'Admit', 'A+C', 'Total'];
+            let csvContent = headers.join(',') + '\n';
+            
+            processedData.forEach(person => {
+                const row = headers.map(header => person[header]).join(',');
+                csvContent += row + '\n';
+            });
+            
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'shift_counts.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showMessage('Results downloaded as CSV file.');
+        }
+    </script>
+</body>
+</html>
