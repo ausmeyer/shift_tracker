@@ -229,44 +229,46 @@
                     if (cellStr.match(/^[A-Za-z]+,\s*[A-Za-z]+/)) {
                         const name = cellStr;
                         
-                        // Look for shift type in the same row, previous columns (more restrictive)
+                        // Only look for shift type in immediate adjacent cells - be very strict
                         let shiftType = null;
-                        for (let prevCol = colIndex - 1; prevCol >= Math.max(0, colIndex - 3); prevCol--) {
-                            const prevCell = row[prevCol];
-                            if (prevCell) {
-                                const prevCellStr = prevCell.toString().trim();
-                                shiftType = categorizeShift(prevCellStr);
-                                if (shiftType) break;
-                            }
-                        }
+                        let foundShiftText = null;
                         
-                        // If no shift type found in same row, look in previous rows, same column (more restrictive)
-                        if (!shiftType) {
-                            for (let prevRow = rowIndex - 1; prevRow >= Math.max(0, rowIndex - 3); prevRow--) {
-                                const prevRowData = data[prevRow];
-                                if (prevRowData && prevRowData[colIndex]) {
-                                    const prevCellStr = prevRowData[colIndex].toString().trim();
-                                    shiftType = categorizeShift(prevCellStr);
-                                    if (shiftType) break;
+                        // Check immediate left cell (most common case)
+                        if (colIndex > 0 && row[colIndex - 1]) {
+                            const leftCell = row[colIndex - 1].toString().trim();
+                            if (leftCell && leftCell.length > 0) {
+                                shiftType = categorizeShift(leftCell);
+                                if (shiftType) {
+                                    foundShiftText = leftCell;
                                 }
                             }
                         }
                         
-                        // If still no shift type, look in immediate nearby cells only
-                        if (!shiftType) {
-                            for (let searchRow = Math.max(0, rowIndex - 2); searchRow <= Math.min(data.length - 1, rowIndex + 1); searchRow++) {
-                                const searchRowData = data[searchRow];
-                                if (!searchRowData) continue;
-                                
-                                for (let searchCol = Math.max(0, colIndex - 2); searchCol <= Math.min(searchRowData.length - 1, colIndex + 1); searchCol++) {
-                                    const searchCell = searchRowData[searchCol];
-                                    if (searchCell) {
-                                        const searchCellStr = searchCell.toString().trim();
-                                        shiftType = categorizeShift(searchCellStr);
-                                        if (shiftType) break;
-                                    }
+                        // Only if no shift found to the left, check directly above
+                        if (!shiftType && rowIndex > 0 && data[rowIndex - 1] && data[rowIndex - 1][colIndex]) {
+                            const aboveCell = data[rowIndex - 1][colIndex].toString().trim();
+                            if (aboveCell && aboveCell.length > 0) {
+                                shiftType = categorizeShift(aboveCell);
+                                if (shiftType) {
+                                    foundShiftText = aboveCell;
                                 }
-                                if (shiftType) break;
+                            }
+                        }
+                        
+                        // Additional validation: only count if we found a substantial shift descriptor
+                        if (shiftType && foundShiftText) {
+                            // Make sure the shift text is actually a shift descriptor, not just random text
+                            const shiftTextLower = foundShiftText.toLowerCase();
+                            const isValidShift = shiftTextLower.includes('team') || 
+                                               shiftTextLower.includes('night') || 
+                                               shiftTextLower.includes('admit') || 
+                                               shiftTextLower.includes('swing') || 
+                                               shiftTextLower.includes('administrator') ||
+                                               shiftTextLower.includes('7p-7a') ||
+                                               shiftTextLower.includes('7a-7p');
+                            
+                            if (!isValidShift) {
+                                shiftType = null; // Ignore this match
                             }
                         }
                         
@@ -320,7 +322,7 @@
             names.forEach(name => {
                 const person = counts[name];
                 const ac = person.A + person.C;
-                const total = person.A + person.C + person.D + person.N + person.Admit + person.Swing + person.Admin;
+                const total = person.A + person.C + person.D + person.N + person.Admit + person.Swing;
                 
                 html += '<tr>';
                 html += `<td>${name}</td>`;
@@ -377,7 +379,7 @@
                     Swing: person.Swing,
                     Admin: person.Admin,
                     'A+C': person.A + person.C,
-                    Total: person.A + person.C + person.D + person.N + person.Admit + person.Swing + person.Admin
+                    Total: person.A + person.C + person.D + person.N + person.Admit + person.Swing
                 };
             });
             
